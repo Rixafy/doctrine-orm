@@ -723,4 +723,14 @@ class Configuration extends \Doctrine\DBAL\Configuration
     {
         return $this->attributes['fetchModeSubselectBatchSize'] ?? 100;
     }
+
+    public function setInferNullabilityFromPHPType(bool $inferNullabilityFromPHPType): void
+    {
+        $this->attributes['inferNullabilityFromPHPType'] = $inferNullabilityFromPHPType;
+    }
+
+    public function isNullabilityInferredFromPHPType(): bool
+    {
+        return $this->attributes['inferNullabilityFromPHPType'] ?? false;
+    }
 }

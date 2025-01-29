@@ -25,6 +25,7 @@ use LogicException;
 use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionProperty;
+use ReflectionType;
 use Stringable;
 
 use function array_column;
@@ -560,8 +561,12 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
      * @param string $name The name of the entity class the new instance is used for.
      * @phpstan-param class-string<T> $name
      */
-    public function __construct(public string $name, NamingStrategy|null $namingStrategy = null, TypedFieldMapper|null $typedFieldMapper = null)
-    {
+    public function __construct(
+        public string $name,
+        NamingStrategy|null $namingStrategy = null,
+        TypedFieldMapper|null $typedFieldMapper = null,
+        public readonly bool $inferNullabilityFromPHPType = false,
+    ) {
         $this->rootEntityName   = $name;
         $this->namingStrategy   = $namingStrategy ?? new DefaultNamingStrategy();
         $this->instantiator     = new Instantiator();
@@ -1163,14 +1168,17 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
     /**
      * Validates & completes the basic mapping information based on typed property.
      *
-     * @param array{type: self::ONE_TO_ONE|self::MANY_TO_ONE|self::ONE_TO_MANY|self::MANY_TO_MANY, fieldName: string, targetEntity?: class-string} $mapping The mapping.
+     * @phpstan-param array{
+     *     type: self::ONE_TO_ONE|self::MANY_TO_ONE|self::ONE_TO_MANY|self::MANY_TO_MANY,
+     *     fieldName: string,
+     *     targetEntity?: class-string,
+     *     joinColumns: array<int, array<string, mixed>>|null,
+     * } $mapping The mapping.
      *
      * @return mixed[] The updated mapping.
      */
-    private function validateAndCompleteTypedAssociationMapping(array $mapping): array
+    private function validateAndCompleteTypedAssociationMapping(array $mapping, ReflectionType|null $type): array
     {
-        $type = $this->reflClass->getProperty($mapping['fieldName'])->getType();
-
         if ($type === null || ($mapping['type'] & self::TO_ONE) === 0) {
             return $mapping;
         }
@@ -1191,6 +1199,7 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
      *     id?: bool,
      *     generated?: self::GENERATED_*,
      *     enumType?: class-string,
+     *     nullable?: bool|null,
      * } $mapping The field mapping to validate & complete.
      *
      * @return FieldMapping The updated mapping.
@@ -1204,8 +1213,15 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
             throw MappingException::missingFieldName($this->name);
         }
 
+        $type = null;
         if ($this->isTypedProperty($mapping['fieldName'])) {
+            $type    = $this->reflClass->getProperty($mapping['fieldName'])->getType();
             $mapping = $this->validateAndCompleteTypedFieldMapping($mapping);
+        }
+
+        // Infer nullable from a type or reset null back to false if the type is missing, Id columns are ignored
+        if ($this->inferNullabilityFromPHPType && ! isset($mapping['nullable']) && ($mapping['id'] ?? false) !== true) {
+            $mapping['nullable'] = $type?->allowsNull() ?? false;
         }
 
         if (! isset($mapping['type'])) {
@@ -1315,8 +1331,10 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
         // the sourceEntity.
         $mapping['sourceEntity'] = $this->name;
 
+        $type = null;
         if ($this->isTypedProperty($mapping['fieldName'])) {
-            $mapping = $this->validateAndCompleteTypedAssociationMapping($mapping);
+            $type    = $this->reflClass->getProperty($mapping['fieldName'])->getType();
+            $mapping = $this->validateAndCompleteTypedAssociationMapping($mapping, $type);
         }
 
         if (isset($mapping['targetEntity'])) {
@@ -1381,6 +1399,25 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
             }
         } else {
             $mapping['isOwningSide'] = false;
+        }
+
+        // Infer nullable from type or reset null back to true if type is missing
+        if ($this->inferNullabilityFromPHPType && $mapping['type'] & self::TO_ONE) {
+            if (! empty($mapping['joinColumns'])) {
+                foreach ($mapping['joinColumns'] as $key => $data) {
+                    if (! isset($data['nullable'])) {
+                        $mapping['joinColumns'][$key]['nullable'] = $type?->allowsNull() ?? true;
+                    }
+                }
+            } elseif ($type !== null && ($mapping['type'] !== self::ONE_TO_ONE || $mapping['isOwningSide'])) { // Ignoring inverse side
+                $mapping['joinColumns'] = [
+                    [
+                        'fieldName' => $mapping['fieldName'],
+                        'nullable' => $type->allowsNull(),
+                        'referencedColumnName' => $this->namingStrategy->referenceColumnName(),
+                    ],
+                ];
+            }
         }
 
         if (isset($mapping['id']) && $mapping['id'] === true && $mapping['type'] & self::TO_MANY) {

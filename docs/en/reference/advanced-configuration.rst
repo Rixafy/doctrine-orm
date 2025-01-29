@@ -255,7 +255,24 @@ For development you should use an array cache like
 ``Symfony\Component\Cache\Adapter\ArrayAdapter``
 which only caches data on a per-request basis.
 
-SQL Logger (**Optional**)
+Nullability detection (**RECOMMENDED**)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note::
+
+    Since ORM 3.6.0
+
+.. code-block:: php
+
+    <?php
+    $config->setInferNullabilityFromPHPType(true);
+
+Sets whether Doctrine should infer columns nullability from PHP types declarations.
+
+You can always override the inferred nullability by specifying the
+``nullable`` option in the Column or JoinColumn definition.
+
+SQL Logger (**OPTIONAL**)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: php

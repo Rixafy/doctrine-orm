@@ -83,10 +83,11 @@ abstract class MappingDriverTestCase extends OrmTestCase
         string $entityClassName,
         NamingStrategy|null $namingStrategy = null,
         TypedFieldMapper|null $typedFieldMapper = null,
+        bool $inferNullabilityFromPHPType = false,
     ): ClassMetadata {
         $mappingDriver = $this->loadDriver();
 
-        $class = new ClassMetadata($entityClassName, $namingStrategy, $typedFieldMapper);
+        $class = new ClassMetadata($entityClassName, $namingStrategy, $typedFieldMapper, $inferNullabilityFromPHPType);
         $class->initializeReflection(new RuntimeReflectionService());
         $mappingDriver->loadMetadataForClass($entityClassName, $class);
 
@@ -958,6 +959,58 @@ abstract class MappingDriverTestCase extends OrmTestCase
         self::assertEquals('id', $metadata->fieldNames['Id']);
         self::assertEquals('Id', $metadata->associationMappings['blogPost']->joinColumns[0]->referencedColumnName);
         self::assertFalse($metadata->associationMappings['blogPost']->joinColumns[0]->nullable);
+    }
+
+    public function testInferredNullability(): void
+    {
+        $getNullabilityFromAssociation = function (ClassMetadata $entity, string $fieldName): bool|null {
+            $mapping = $entity->getAssociationMapping($fieldName);
+            $this->assertInstanceof(ORM\ToOneOwningSideMapping::class, $mapping);
+
+            return $mapping->joinColumns[0]->nullable;
+        };
+
+        // Missing types
+        foreach ([true, false] as $infer) {
+            $untyped = $this->createClassMetadata(User::class, inferNullabilityFromPHPType: $infer);
+            $this->assertTrue($untyped->isNullable('name')); // Explicit with missing type
+            $this->assertFalse($untyped->isNullable('email')); // Default with missing type
+            $this->assertTrue($getNullabilityFromAssociation($untyped, 'address')); // Default with missing type
+        }
+
+        // Typed with enabled inference
+        $typed = $this->createClassMetadata(UserTyped::class, inferNullabilityFromPHPType: true);
+        $this->assertFalse($typed->isNullable('id')); // Id column should not inherit nullability
+        $this->assertTrue($typed->isNullable('status')); // Infers from PHP type
+        $this->assertFalse($typed->isNullable('username')); // Infers from PHP type
+        $this->assertTrue($typed->isNullable('firstName')); // By definition
+        $this->assertFalse($typed->isNullable('lastName')); // By definition
+
+        foreach (['email', 'mainEmail', 'emailOverride'] as $value) {
+            $this->assertFalse($getNullabilityFromAssociation($typed, $value));
+        }
+
+        foreach (['emailWithNoJoinColumn', 'mainEmailWithNoJoinColumn', 'mainEmailOverride'] as $value) {
+            $this->assertTrue($getNullabilityFromAssociation($typed, $value));
+        }
+
+        // Typed with disabled inference
+        $typed = $this->createClassMetadata(UserTyped::class);
+        $this->assertFalse($typed->isNullable('id')); // Default
+        $this->assertFalse($typed->isNullable('status')); // Default
+        $this->assertFalse($typed->isNullable('username')); // Default
+        $this->assertTrue($typed->isNullable('firstName')); // Explicit
+        $this->assertFalse($typed->isNullable('lastName')); // Explicit
+
+        foreach (['email', 'mainEmail', 'mainEmailOverride'] as $value) {
+            $this->assertTrue($getNullabilityFromAssociation($typed, $value));
+        }
+
+        foreach (['emailWithNoJoinColumn', 'mainEmailWithNoJoinColumn'] as $value) {
+            $this->assertTrue($getNullabilityFromAssociation($typed, $value));
+        }
+
+        $this->assertFalse($getNullabilityFromAssociation($typed, 'emailOverride'));
     }
 }
 
