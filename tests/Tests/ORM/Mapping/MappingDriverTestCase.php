@@ -76,7 +76,7 @@ use const CASE_UPPER;
 
 abstract class MappingDriverTestCase extends OrmTestCase
 {
-    abstract protected function loadDriver(): MappingDriver;
+    abstract protected function loadDriver(bool $inferNullabilityFromPHPType = false): MappingDriver;
 
     /** @param class-string<object> $entityClassName */
     public function createClassMetadata(
@@ -85,9 +85,10 @@ abstract class MappingDriverTestCase extends OrmTestCase
         TypedFieldMapper|null $typedFieldMapper = null,
         bool $inferNullabilityFromPHPType = false,
     ): ClassMetadata {
-        $mappingDriver = $this->loadDriver();
+        $mappingDriver = $this->loadDriver($inferNullabilityFromPHPType);
 
-        $class = new ClassMetadata($entityClassName, $namingStrategy, $typedFieldMapper, $inferNullabilityFromPHPType);
+        $class                              = new ClassMetadata($entityClassName, $namingStrategy, $typedFieldMapper);
+        $class->inferNullabilityFromPHPType = $inferNullabilityFromPHPType;
         $class->initializeReflection(new RuntimeReflectionService());
         $mappingDriver->loadMetadataForClass($entityClassName, $class);
 

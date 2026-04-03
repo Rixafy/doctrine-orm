@@ -304,7 +304,6 @@ class ClassMetadataFactory extends AbstractClassMetadataFactory
             $className,
             $this->em->getConfiguration()->getNamingStrategy(),
             $this->em->getConfiguration()->getTypedFieldMapper(),
-            $this->em->getConfiguration()->isNullabilityInferredFromPHPType(),
         );
     }
 

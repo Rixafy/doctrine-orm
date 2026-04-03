@@ -561,11 +561,12 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
      * @param string $name The name of the entity class the new instance is used for.
      * @phpstan-param class-string<T> $name
      */
+    public bool $inferNullabilityFromPHPType = false;
+
     public function __construct(
         public string $name,
         NamingStrategy|null $namingStrategy = null,
         TypedFieldMapper|null $typedFieldMapper = null,
-        public readonly bool $inferNullabilityFromPHPType = false,
     ) {
         $this->rootEntityName   = $name;
         $this->namingStrategy   = $namingStrategy ?? new DefaultNamingStrategy();

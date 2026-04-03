@@ -260,14 +260,16 @@ Nullability detection (**RECOMMENDED**)
 
 .. note::
 
-    Since ORM 3.6.0
+    Since ORM 3.7.0
 
 .. code-block:: php
 
     <?php
-    $config->setInferNullabilityFromPHPType(true);
+    $driver = new \Doctrine\ORM\Mapping\Driver\AttributeDriver($paths, inferNullabilityFromPHPType: true);
+    $config->setMetadataDriverImpl($driver);
 
-Sets whether Doctrine should infer columns nullability from PHP types declarations.
+Sets whether the mapping driver should infer columns nullability from PHP type declarations.
+This is a per-driver setting, which means different entity mappings can use different modes.
 
 You can always override the inferred nullability by specifying the
 ``nullable`` option in the Column or JoinColumn definition.
